@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SudaChat - سوداتشات</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        body { background-color: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .app-container { width: 100%; max-width: 480px; height: 100vh; background: #fff; display: flex; flex-direction: column; box-shadow: 0 4px 12px rgba(0,0,0,0.1); overflow: hidden; }
+        @media (min-width: 481px) { .app-container { height: 85vh; border-radius: 16px; } }
+        
+        .header { background-color: #007A3D; color: white; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; font-size: 1.15rem; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .back-btn { background: none; border: none; color: white; font-size: 1.4rem; cursor: pointer; padding-left: 10px; }
+        .user-badge { font-size: 0.75rem; background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 12px; direction: ltr; }
+
+        .screen { display: none; flex: 1; flex-direction: column; height: 100%; overflow: hidden; }
+        .screen.active { display: flex; }
+
+        .auth-box { padding: 40px 20px; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; flex: 1; gap: 15px; }
+        .auth-box h2 { color: #007A3D; margin-bottom: 5px; }
+        .auth-box input { width: 100%; padding: 14px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; text-align: left; direction: ltr; }
+        .auth-box button { width: 100%; padding: 14px; background: #007A3D; color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+
+        .new-chat-bar { padding: 12px; background: #f8f9fa; border-bottom: 1px solid #e4e6eb; display: flex; gap: 8px; }
+        .new-chat-bar input { flex: 1; padding: 10px 14px; border: 1px solid #ccc; border-radius: 20px; font-size: 0.9rem; text-align: left; direction: ltr; outline: none; }
+        .new-chat-bar button { background: #007A3D; color: white; border: none; padding: 0 16px; border-radius: 20px; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
+        
+        .contacts-list { flex: 1; overflow-y: auto; }
+        .contact-item { display: flex; align-items: center; padding: 14px 16px; border-bottom: 1px solid #f0f2f5; cursor: pointer; transition: background 0.2s; gap: 12px; }
+        .contact-item:hover { background: #f5f6f6; }
+        .avatar { width: 46px; height: 46px; border-radius: 50%; background: #D21034; color: white; display: flex; justify-content: center; align-items: center; font-weight: bold; font-size: 1.1rem; flex-shrink: 0; }
+        .contact-info { flex: 1; }
+        .contact-phone { font-weight: bold; color: #111b21; font-size: 1rem; direction: ltr; text-align: right; }
+        .contact-sub { font-size: 0.8rem; color: #667781; margin-top: 2px; }
+
+        .chat-box { flex: 1; overflow-y: auto; padding: 16px; background: #efeae2; display: flex; flex-direction: column; gap: 8px; }
+        .message { max-width: 78%; padding: 8px 12px; border-radius: 8px; font-size: 0.95rem; word-break: break-word; line-height: 1.4; box-shadow: 0 1px 1px rgba(0,0,0,0.08); }
+        .message.incoming { background: #ffffff; align-self: flex-start; color: #111b21; border-top-right-radius: 0; }
+        .message.outgoing { background: #d9fdd3; align-self: flex-end; color: #111b21; border-top-left-radius: 0; }
+        .msg-time { font-size: 0.65rem; color: #667781; text-align: left; margin-top: 4px; }
+
+        .input-bar { display: flex; padding: 10px; background: #f0f2f5; gap: 8px; align-items: center; }
+        .input-bar input { flex: 1; padding: 12px 16px; border: none; border-radius: 24px; outline: none; font-size: 0.95rem; text-align: right; direction: rtl; background: #fff; }
+        .input-bar button { background: #007A3D; color: white; border: none; width: 44px; height: 44px; border-radius: 50%; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 1.1rem; }
+    </style>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-app.js";
+        import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/13.3.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDoqkA6qpS8nXktiLbnrdLMfh2wEAjElgw",
+            authDomain: "sudachat-2cb9e.firebaseapp.com",
+            databaseURL: "https://sudachat-2cb9e-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "sudachat-2cb9e",
+            storageBucket: "sudachat-2cb9e.firebasestorage.app",
+            messagingSenderId: "227070176416",
+            appId: "1:227070176416:web:f8430360e1134a8f4dadc5"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        auth.languageCode = 'ar';
+        const db = getFirestore(app);
+
+        let myPhone = "";
+        let activeFriendPhone = "";
+        let unsubscribeChat = null;
+        let confirmationResultGlobal = null;
+
+        window.onload = function() {
+            window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+                'size': 'invisible'
+            });
+        };
+
+        window.sendVerificationCode = function() {
+            const phoneInput = document.getElementById('phoneInput').value.trim();
+            if(!phoneInput || !phoneInput.startsWith('+')) {
+                alert('الرجاء إدخال رقم الجوال مع رمز الدولة (مثال: +249912345678)');
+                return;
+            }
+            myPhone = phoneInput;
+
+            signInWithPhoneNumber(auth, myPhone, window.recaptchaVerifier)
+                .then((confirmationResult) => {
+                    confirmationResultGlobal = confirmationResult;
+                    document.getElementById('phoneSection').style.display = 'none';
+                    document.getElementById('codeSection').style.display = 'flex';
+                }).catch((error) => {
+                    console.error(error);
+                    alert('تعذر إرسال الرمز. تأكد من تفعيل Phone Auth أو إضافة الرقم في أرقام الاختبار.');
+                });
+        };
+
+        window.verifyCode = function() {
+            const codeInput = document.getElementById('codeInput').value.trim();
+            if(!codeInput) return;
+
+            confirmationResultGlobal.confirm(codeInput).then(async () => {
+                await setDoc(doc(db, "users", myPhone), {
+                    phone: myPhone,
+                    lastSeen: serverTimestamp()
+                }, { merge: true });
+
+                document.getElementById('myPhoneBadge').innerText = myPhone;
+                switchScreen('listScreen');
+                loadRegisteredUsers();
+            }).catch((error) => {
+                console.error(error);
+                alert('رمز التحقق غير صحيح!');
+            });
+        };
+
+        function loadRegisteredUsers() {
+            onSnapshot(collection(db, "users"), (snapshot) => {
+                const list = document.getElementById('contactsList');
+                list.innerHTML = '';
+                snapshot.forEach((docSnap) => {
+                    const user = docSnap.data();
+                    if (user.phone !== myPhone) {
+                        const item = document.createElement('div');
+                        item.className = 'contact-item';
+                        item.onclick = () => openPrivateChat(user.phone);
+                        item.innerHTML = `
+                            <div class="avatar">🇸🇩</div>
+                            <div class="contact-info">
+                                <div class="contact-phone">${user.phone}</div>
+                                <div class="contact-sub">اضغط لبدء محادثة خاصة</div>
+                            </div>
+                        `;
+                        list.appendChild(item);
+                    }
+                });
+                if(list.innerHTML === '') {
+                    list.innerHTML = '<p style="text-align:center; color:#888; padding:30px;">لا يوجد مستخدمون آخرون بعد. أدخل رقم صديقك في الأعلى لمراسلته!</p>';
+                }
+            });
+        }
+
+        window.startNewChatByPhone = function() {
+            const targetPhone = document.getElementById('targetPhoneInput').value.trim();
+            if(!targetPhone || !targetPhone.startsWith('+')) {
+                alert('أدخل رقم صديقك مع رمز الدولة (مثال: +249...)');
+                return;
+            }
+            if(targetPhone === myPhone) {
+                alert('لا يمكنك مراسلة نفسك!');
+                return;
+            }
+            document.getElementById('targetPhoneInput').value = '';
+            openPrivateChat(targetPhone);
+        };
+
+        window.openPrivateChat = function(friendPhone) {
+            activeFriendPhone = friendPhone;
+            document.getElementById('chatHeaderTitle').innerText = friendPhone;
+            switchScreen('chatScreen');
+
+            const chatId = [myPhone, activeFriendPhone].sort().join('_');
+
+            if (unsubscribeChat) unsubscribeChat();
+
+            const q = query(collection(db, "chats", chatId, "messages"), orderBy("timestamp", "asc"));
+            unsubscribeChat = onSnapshot(q, (snapshot) => {
+                const chatBox = document.getElementById('chatBox');
+                chatBox.innerHTML = '';
+                snapshot.forEach((docSnap) => {
+                    const msg = docSnap.data();
+                    const isMe = msg.sender === myPhone;
+                    const div = document.createElement('div');
+                    div.className = `message ${isMe ? 'outgoing' : 'incoming'}`;
+                    
+                    let timeStr = '';
+                    if (msg.timestamp) {
+                        const date = msg.timestamp.toDate();
+                        timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    }
+
+                    div.innerHTML = `<div>${msg.text}</div><div class="msg-time">${timeStr}</div>`;
+                    chatBox.appendChild(div);
+                });
+                chatBox.scrollTop = chatBox.scrollHeight;
+            });
+        };
+
+        window.sendMessage = async function() {
+            const input = document.getElementById('msgInput');
+            const text = input.value.trim();
+            if(!text || !activeFriendPhone) return;
+
+            const chatId = [myPhone, activeFriendPhone].sort().join('_');
+            input.value = '';
+
+            try {
+                await addDoc(collection(db, "chats", chatId, "messages"), {
+                    text: text,
+                    sender: myPhone,
+                    timestamp: serverTimestamp()
+                });
+            } catch (e) {
+                console.error("خطأ في الإرسال:", e);
+            }
+        };
+
+        window.switchScreen = function(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(screenId).classList.add('active');
+        };
+    </script>
+</head>
+<body>
+
+    <div class="app-container">
+        
+        <!-- 1. شاشة تسجيل الدخول -->
+        <div id="authScreen" class="screen active">
+            <div class="header"><span>SudaChat 🇸🇩</span></div>
+            <div class="auth-box">
+                <h2>مرحباً بك في سوداتشات</h2>
+                <div id="phoneSection" style="width: 100%; display: flex; flex-direction: column; gap: 15px;">
+                    <p style="color: #666; font-size: 0.9rem;">سجل برقم جوالك للتواصل الخاص مع أصدقائك</p>
+                    <input type="tel" id="phoneInput" placeholder="+249912345678">
+                    <button onclick="sendVerificationCode()">التالي</button>
+                </div>
+
+                <div id="codeSection" style="width: 100%; display: none; flex-direction: column; gap: 15px;">
+                    <p style="color: #666; font-size: 0.9rem;">أدخل رمز التحقق المرسل لهاتفك</p>
+                    <input type="text" id="codeInput" placeholder="123456" style="text-align: center; letter-spacing: 4px; font-weight: bold;">
+                    <button onclick="verifyCode()">تأكيد والدخول</button>
+                </div>
+                <!-- عنصر أمان جوجل المخفي -->
+                <div id="recaptcha-container"></div>
+            </div>
+        </div>
+
+        <!-- 2. شاشة قائمة الدردشات -->
+        <div id="listScreen" class="screen">
+            <div class="header">
+                <span>الدردشات - SudaChat 🇸🇩</span>
+                <span class="user-badge" id="myPhoneBadge"></span>
+            </div>
+            
+            <div class="new-chat-bar">
+                <input type="tel" id="targetPhoneInput" placeholder="رقم صديق جديد (+249...)">
+                <button onclick="startNewChatByPhone()">محادثة</button>
+            </div>
+
+            <div class="contacts-list" id="contactsList"></div>
+        </div>
+
+        <!-- 3. شاشة المحادثة الخاصة -->
+        <div id="chatScreen" class="screen">
+            <div class="header">
+                <div style="display: flex; align-items: center;">
+                    <button class="back-btn" onclick="switchScreen('listScreen')">➔</button>
+                    <span id="chatHeaderTitle" style="direction: ltr;"></span>
+                </div>
+                <span>🇸🇩</span>
+            </div>
+            
+            <div class="chat-box" id="chatBox"></div>
+
+            <div class="input-bar">
+                <input type="text" id="msgInput" placeholder="رسالة..." onkeypress="if(event.key === 'Enter') sendMessage()">
+                <button onclick="sendMessage()">➤</button>
+            </div>
+        </div>
+
+    </div>
+
+</body>
+</html>
